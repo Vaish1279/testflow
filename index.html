@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestFlow — Structured Software Testing</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="#home"><span class="brand-mark">&lt;/&gt;</span><span>Test<span>Flow</span></span></a>
+  <nav class="nav">
+    <a href="#workspace">⌘ Workspace</a><a href="#how">? How it works</a><a href="#testing-types">▤ Testing types</a><a href="#documentation">▥ Docs</a><a href="#plans">◇ Plans</a><a class="auth-nav" href="#history" hidden>◷ History</a>
+  </nav>
+  <div class="header-actions">
+    <button class="ghost auth-only" id="accountBtn" hidden>◎ Account</button>
+    <button class="ghost auth-only" id="profileBtn" hidden>◉ Profile</button>
+    <button class="ghost" id="loginBtn">↪ Log in</button>
+    <button class="primary small" id="startBtn">＋ Start Testing</button>
+  </div>
+</header>
+
+<main id="home">
+<section class="hero">
+  <div class="hero-copy"><div class="eyebrow">STRUCTURED SOFTWARE TESTING</div><h1>Test the code.<br><em>Test the application.</em></h1><p>TestFlow is a testing workspace for project input, code-level checks, application/UI testing, evidence and clear reports.</p><div class="hero-actions"><button class="primary" id="heroStart">Start a test</button><a class="secondary" href="#testing-types">Explore testing types</a></div><div class="hero-note"><span class="dot"></span> Account required for testing and private history. No history is created until you actually run a test.</div></div>
+  <div class="hero-panel"><div class="panel-top"><span>TESTFLOW WORKSPACE</span><b>READY</b></div><div class="hero-grid"><div><small>INPUT</small><strong>ZIP</strong><span>or project folder</span></div><div><small>TEST</small><strong>12</strong><span>testing capabilities</span></div><div><small>EVIDENCE</small><strong>+</strong><span>results & logs</span></div><div><small>HISTORY</small><strong>0</strong><span>until a test runs</span></div></div><div class="mini-terminal"><span>›</span> Upload project<br><span>›</span> Select test type<br><span>›</span> Run test → save evidence</div></div>
+</section>
+
+<section class="workspace-section" id="workspace">
+  <div class="section-heading">
+    <div><div class="eyebrow">TEST WORKSPACE</div><h2>Choose a test.<br>Upload only what that test needs.</h2><p class="workspace-status" id="workspaceStatus">Log in or create a Free account to start testing.</p></div>
+    <button class="secondary" id="workspaceLogin">Log in to test</button>
+  </div>
+  <div id="workspaceGate" class="workspace-gate"><div><b>Testing is account-based.</b><p>Login is required before a test can run. Free testing is available without payment.</p><button class="primary" onclick="document.querySelector('#loginBtn').click()">Log in / Create account</button></div></div>
+  <div id="workspaceControls" hidden>
+    <div class="selected-test-bar"><div><span>SELECTED TEST</span><strong id="selectedTestLabel">Functional testing</strong><small id="selectedTestHint">Choose the testing subject, upload its source, then run the selected test.</small></div><span id="selectedTestPlan" class="plan-chip">FREE</span></div>
+    <div class="subject-switch" aria-label="Testing subject"><button type="button" class="subject-btn active" data-subject="code">Code Testing</button><button type="button" class="subject-btn" data-subject="application">Application Testing</button><span id="subjectHint">Code report: analyse uploaded source files.</span></div>
+    <select id="testType" hidden><option value="functional">Functional testing</option><option value="ui">UI testing</option><option value="responsive">Responsive testing</option><option value="whitebox">White-box testing</option><option value="function">Function analysis</option><option value="path">Condition & path testing</option><option value="execution">Execution & console insight</option><option value="regression">Regression testing</option><option value="compatibility">Compatibility testing</option><option value="performance">Performance testing</option><option value="evidence">Evidence collection</option><option value="report">Reports</option></select>
+
+    <div class="testing-workspace-grid">
+      <div class="workspace-pane code-pane">
+        <div class="pane-head"><span><b>CODE TESTING</b><small>Upload source code → analyze → report in this terminal</small></span><span class="status-dot">● Waiting</span></div>
+        <div class="pane-upload"><label class="secondary upload-btn">Upload your code<input id="codeInput" type="file" multiple accept=".js,.ts,.jsx,.tsx,.py,.java,.c,.h,.cpp,.cc,.cxx,.php,.json,.sql,.html,.css,.txt"></label><button class="danger tiny" id="clearCode">Clear</button></div>
+        <div class="source-summary" id="codeSummary">No code uploaded.</div>
+        <pre class="code-terminal" id="codeTerminal"><span class="terminal-muted">CODE TERMINAL — waiting for a code-testing source.</span></pre>
+      </div>
+
+      <div class="workspace-pane app-pane">
+        <div class="pane-head"><span><b>APPLICATION TESTING</b><small>Upload ZIP → select HTML → open the application here</small></span><span class="status-dot">● Waiting</span></div>
+        <div class="pane-upload"><label class="secondary upload-btn">Upload application ZIP<input id="appZipInput" type="file" accept=".zip,application/zip"></label><button class="danger tiny" id="clearApp">Clear</button></div>
+        <div class="source-summary" id="appSummary">No application ZIP uploaded.</div>
+        <div class="html-selector-row"><label for="appEntrySelect">HTML file to open</label><select id="appEntrySelect" disabled><option>Select an application ZIP first</option></select><button class="secondary tiny" id="openAppBtn" disabled>Open</button></div>
+        <div class="browser-shell"><div class="browser-bar"><span>●</span><span id="browserPath">testflow.local / waiting</span></div><iframe id="appFrame" title="Uploaded application preview" sandbox="allow-scripts allow-forms"></iframe></div>
+        <pre class="app-terminal" id="appTerminal"><span class="terminal-muted">APPLICATION TERMINAL — upload a ZIP and select an HTML file.</span></pre>
+      </div>
+    </div>
+
+    <div class="run-control"><button class="primary" id="runTestBtn" disabled>▶ Run selected test</button><span id="runRequirement">Choose a testing type and upload its required source.</span></div>
+    <div id="testResultPanel" class="test-result-panel" hidden></div>
+  </div>
+</section>
+
+<section class="testing-types" id="testing-types"><div class="section-heading"><div><div class="eyebrow">TESTING CATALOG + DEMOS</div><h2>What TestFlow can test.</h2></div><p>Select any testing type to jump to the workspace. TestFlow runs that selected check only after the required upload is ready.</p></div><div class="type-grid">
+<article class="type-card" data-test-type="functional"><span>01 · FREE</span><h3>Functional testing</h3><p>Checks whether a feature behaves according to an expected requirement.</p><div class="demo"><b>Demo:</b> Validate login inputs and compare expected vs actual result.</div></article>
+<article class="type-card" data-test-type="ui"><span>02 · FREE</span><h3>UI testing</h3><p>Checks visible elements, interaction, labels, states, spacing and navigation.</p><div class="demo"><b>Demo:</b> Click Login → inspect button state and message.</div></article>
+<article class="type-card" data-test-type="responsive"><span>03 · FREE</span><h3>Responsive testing</h3><p>Checks layout behaviour across desktop, tablet and mobile widths.</p><div class="demo"><b>Demo:</b> Resize preview → flag overflow or broken alignment.</div></article>
+<article class="type-card premium-card" data-test-type="whitebox"><span>04 · PREMIUM</span><h3>White-box testing</h3><p>Examines internal code structure, branches, paths and execution behaviour.</p><div class="demo"><b>Demo:</b> Analyse a function → list conditions and reachable paths.</div></article>
+<article class="type-card premium-card" data-test-type="function"><span>05 · PREMIUM</span><h3>Function analysis</h3><p>Identifies functions, inputs, outputs and suspicious or uncovered behaviour.</p><div class="demo"><b>Demo:</b> Map inputs → expected output → actual output.</div></article>
+<article class="type-card premium-card" data-test-type="path"><span>06 · PREMIUM</span><h3>Condition & path</h3><p>Checks if/else branches and meaningful execution paths.</p><div class="demo"><b>Demo:</b> Empty email / short password / valid input → compare branches.</div></article>
+<article class="type-card premium-card" data-test-type="execution"><span>07 · PREMIUM</span><h3>Execution & console</h3><p>Connects runtime output, timing, warnings and errors with a test.</p><div class="demo"><b>Demo:</b> Run a test → record runtime warnings and timing.</div></article>
+<article class="type-card pro-card" data-test-type="regression"><span>08 · PRO</span><h3>Regression testing</h3><p>Compares a new test result against a previous baseline.</p><div class="demo"><b>Demo:</b> Run the same scenario twice → highlight changes.</div></article>
+<article class="type-card pro-card" data-test-type="compatibility"><span>09 · PRO</span><h3>Compatibility</h3><p>Checks behaviour across supported browsers, environments and screen sizes.</p><div class="demo"><b>Demo:</b> Compare the same scenario across environments.</div></article>
+<article class="type-card pro-card" data-test-type="performance"><span>10 · PRO</span><h3>Performance</h3><p>Measures response timing and identifies slow interactions or pages.</p><div class="demo"><b>Demo:</b> Measure navigation/load timing → identify slow steps.</div></article>
+<article class="type-card" data-test-type="evidence"><span>11 · FREE</span><h3>Evidence collection</h3><p>Keeps screenshots, actions, logs and timing attached to a test session.</p><div class="demo"><b>Demo:</b> Capture an interaction record with the completed test.</div></article>
+<article class="type-card" data-test-type="report"><span>12 · FREE</span><h3>Reports</h3><p>Turns test outcomes into readable findings, recommendations and evidence.</p><div class="demo"><b>Demo:</b> Complete a test → generate a saved report.</div></article>
+</div></section>
+
+<section class="history-section auth-section" id="history" hidden><div class="section-heading"><div><div class="eyebrow">PRIVATE HISTORY + PERIODIC REPORTS</div><h2>Your saved test sessions.</h2><p>Daily, weekly, monthly and yearly reports are generated from completed tests. Users see only their own activity; Admin sees all users.</p></div><button class="secondary" id="refreshHistory">↻ Refresh</button></div><div id="periodicReports"></div><div id="historyList" class="history-list"><div class="empty">No saved test sessions yet.</div></div></section>
+
+<section class="documentation" id="documentation"><div><div class="eyebrow">DOCUMENTATION</div><h2>Formal product documentation.</h2><p><b>TestFlow</b> is a structured software testing workspace for source code, applications, evidence, reports and controlled plan access.</p></div><div class="product-doc"><div><b>Code Testing</b><p>Upload source code, choose a code-testing type and receive a focused report based on the uploaded files.</p></div><div><b>Application Testing</b><p>Upload an application ZIP, choose its HTML entry page, preview it in TestFlow and run application-focused checks.</p></div><div><b>Reports & History</b><p>Completed tests create private history records with formal reports, evidence, report viewing and download actions.</p></div><div><b>Plans & Access</b><p>Free, Premium and Pro control testing depth. Admin access unlocks all plans without payment and is protected by Supabase.</p></div><div><b>Product boundary</b><p>Current browser testing performs safe project-aware analysis. Server-side PHP/MySQL execution is not run directly in the main browser.</p></div><a class="product-doc-link" href="TESTFLOW-PRODUCT-DOCUMENTATION.md">Open formal product documentation →</a></div></section>
+
+<section class="how" id="how"><div class="eyebrow">HOW IT WORKS</div><h2>A test should leave evidence.</h2><div class="steps"><article><span>01</span><h3>Account</h3><p>Login is required before testing and history. Free access requires no payment.</p></article><article><span>02</span><h3>Project input</h3><p>Upload a ZIP or project folder. A project is not executed automatically.</p></article><article><span>03</span><h3>Run a test</h3><p>Select an allowed testing type and explicitly press Run test. That action creates the session.</p></article><article><span>04</span><h3>Evidence + report</h3><p>Results, evidence and a report are stored against the completed session.</p></article></div></section>
+
+<section class="features" id="features"><div class="eyebrow">PRODUCT PRINCIPLES</div><h2>Simple to understand. Structured to grow.</h2><div class="feature-grid"><article><span>01</span><h3>One workspace</h3><p>Code-level analysis and application/UI testing are planned as one connected testing workflow.</p></article><article><span>02</span><h3>Evidence first</h3><p>Findings should be supported by actions, logs, timing, screenshots or source evidence.</p></article><article><span>03</span><h3>Controlled access</h3><p>Free, Premium and Pro are feature plans. Admin access is controlled by the database role.</p></article></div></section>
+
+<section class="plans" id="plans"><div class="plans-intro"><div><div class="eyebrow">ACCESS PLANS</div><h2>Choose the testing depth.</h2></div><p>Prices below are the current TestFlow proposal. Paid activation is manual during the initial product stage.</p></div><div class="plan-grid"><article class="plan"><div class="plan-top"><span>FREE</span><h3>Start</h3><p>For learning, basic projects and functional/UI checks.</p><strong>₹0 <small>forever</small></strong></div><ul><li>Functional testing</li><li>Basic UI testing</li><li>Basic responsive checks</li><li>Evidence collection</li><li>Basic reports</li><li>Private history</li></ul><button class="secondary plan-btn" data-plan="free">Get Free Access</button></article><article class="plan featured"><div class="recommended">POPULAR</div><div class="plan-top"><span>PREMIUM</span><h3>Deeper testing</h3><p>For code-level and execution insight.</p><strong>₹499 <small>/ month · proposed</small></strong></div><ul><li>Everything in Free</li><li>White-box testing</li><li>Function analysis</li><li>Condition/path analysis</li><li>Execution & console insight</li><li>Detailed reports</li></ul><button class="primary plan-btn" data-plan="premium">Request Premium</button></article><article class="plan"><div class="plan-top"><span>PRO</span><h3>Full workflow</h3><p>For regression, compatibility and performance workflows.</p><strong>₹999 <small>/ month · proposed</small></strong></div><ul><li>Everything in Premium</li><li>Regression testing</li><li>Compatibility testing</li><li>Cross-browser scope</li><li>Performance testing</li><li>History comparisons</li></ul><button class="secondary plan-btn" data-plan="pro">Request Pro</button></article></div><div class="admin-note"><b>TestFlow</b></div></section>
+
+<section class="review-section" id="review"><div><div class="eyebrow">REPORT FEEDBACK</div><h2>Finished a report?<br><em>Rate the experience.</em></h2><p>After you download a report, rate <b id="reviewTarget">the report</b> and leave any suggestions that could improve TestFlow.</p></div><div class="review-card"><div class="stars" id="stars"><button data-star="1">☆</button><button data-star="2">☆</button><button data-star="3">☆</button><button data-star="4">☆</button><button data-star="5">☆</button></div><textarea id="reviewText" placeholder="What worked well? What should we improve?"></textarea><button class="primary" id="submitReview">Submit review</button><small id="reviewStatus">Reviews are saved to the logged-in account.</small></div></section>
+<section class="cta"><div><div class="eyebrow">READY WHEN YOU ARE</div><h2>Upload a project.<br><em>Test with evidence.</em></h2></div><button class="primary" id="ctaStart">Start Testing</button></section>
+</main>
+
+<footer><div class="footer-top"><div><a class="brand" href="#home"><span class="brand-mark">&lt;/&gt;</span><span>Test<span>Flow</span></span></a><p>Structured software testing for code, applications, evidence and reports.</p></div><div><h4>Platform</h4><a href="#workspace">Workspace</a><a href="#testing-types">Testing types</a><a href="#plans">Plans</a><a href="#documentation">Documentation</a></div><div><h4>Account</h4><a href="#" id="footerLogin">↪ Log in</a><span class="footer-auth" hidden><a href="#" id="footerAccount">◎ Account</a><a href="#" id="footerProfile">◉ Profile</a></span></div><div><h4>Support</h4><a href="#how">How it works</a><a href="#review">Reviews</a><a href="#documentation">Product documentation</a></div></div><div class="footer-bottom"><span>© 2026 TestFlow</span><span>Paid plans use manual verification during the initial product stage.</span></div></footer>
+
+<div class="modal" id="authModal" aria-hidden="true"><div class="modal-card auth-card"><button class="close" data-close>×</button><div class="eyebrow">TESTFLOW ACCOUNT</div><h2 id="authTitle">Log in</h2><p id="authMessage">Log in to access testing, private history, account and profile features.</p><form id="authForm"><label>Full name <input id="authName" autocomplete="name" placeholder="Your name"></label><label>Email <input id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label><label>Password <input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Minimum 6 characters"></label><button class="primary full" id="authSubmit" type="submit">Log in</button></form><button class="link-btn" id="switchAuth">Create a new account</button><button class="link-btn" id="forgotBtn">Forgot password?</button><div class="form-status" id="authStatus"></div></div></div>
+<div class="modal" id="accountModal" aria-hidden="true"><div class="modal-card"><button class="close" data-close>×</button><div class="eyebrow">ACCOUNT</div><h2>Your account</h2><div id="accountInfo" class="account-info"></div><div id="upgradeBox" class="upgrade-box"></div><button class="secondary full" id="logoutBtn">↪ Log out</button></div></div>
+<div class="modal" id="profileModal" aria-hidden="true"><div class="modal-card"><button class="close" data-close>×</button><div class="eyebrow">PROFILE</div><h2>Your profile</h2><form id="profileForm"><label>Full name<input id="profileName"></label><label>Email<input id="profileEmail" disabled></label><button class="primary full">Save profile</button></form><div class="form-status" id="profileStatus"></div></div></div>
+<div class="modal" id="requestModal" aria-hidden="true"><div class="modal-card"><button class="close" data-close>×</button><div class="eyebrow">PLAN REQUEST</div><h2 id="requestTitle">Request Premium</h2><p>Your signed-in account email is sent with this request. No payment reference is requested at this stage.</p><form id="requestForm"><input type="hidden" id="requestedPlan"><div class="request-email-preview"><b>Request email</b><span id="requestEmailPreview">—</span></div><button class="primary full">Send plan request</button></form><div class="form-status" id="requestStatus"></div></div></div></div>
+<div class="modal" id="adminModal" aria-hidden="true"><div class="modal-card wide"><button class="close" data-close>×</button><div class="eyebrow">ADMIN CONTROL</div><h2>Admin workspace</h2><div id="adminStats" class="admin-stats"></div><div id="adminUsageReports"></div><h3>Upgrade requests</h3><div id="adminRequests" class="admin-requests">Loading…</div></div></div>
+<div class="modal" id="resetModal" aria-hidden="true"><div class="modal-card"><button class="close" data-close>×</button><div class="eyebrow">PASSWORD RESET</div><h2>Set a new password</h2><form id="resetForm"><label>New password<input id="newPassword" type="password" minlength="6" required></label><button class="primary full">Update password</button></form><div class="form-status" id="resetStatus"></div></div></div>
+<div class="modal" id="reportModal" aria-hidden="true"><div class="modal-card wide"><button class="close" data-close>×</button><div class="eyebrow">TEST REPORT</div><div id="reportModalBody"></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="config.js"></script><script src="app.js"></script>
+</body></html>
