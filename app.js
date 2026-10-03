@@ -44,9 +44,22 @@ function escapeHtml(value){
   return String(value ?? "").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 }
 function isAdmin(){ return currentProfile?.role === "admin"; }
-function planRank(){ return isAdmin() ? 99 : PLAN_RANK[currentProfile?.plan || "free"]; }
+function trialActive(){ return !!(currentProfile?.trial_expires_at && new Date(currentProfile.trial_expires_at).getTime()>Date.now() && currentProfile?.trial_number); }
+function effectivePlan(){ return isAdmin() ? "pro" : (trialActive() ? "pro" : (currentProfile?.plan || "free")); }
+function planRank(){ return PLAN_RANK[effectivePlan()]; }
 function canUse(testKey){ return planRank() >= PLAN_RANK[TESTS[testKey]?.plan || "free"]; }
 function requiredPlan(testKey){ return TESTS[testKey]?.plan || "free"; }
+function accessSummary(){
+  const p=effectivePlan();
+  if(p==='pro') return 'Free + Premium + Pro tests';
+  if(p==='premium') return 'Free + Premium tests';
+  return 'Free tests';
+}
+function trialLabel(){
+  if(!trialActive()) return '';
+  const d=new Date(currentProfile.trial_expires_at);
+  return ` · First 500 trial · all plans until ${d.toLocaleDateString()}`;
+}
 function prettySize(bytes){
   if(bytes < 1024) return `${bytes} B`;
   if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
@@ -140,8 +153,10 @@ $("#authForm").onsubmit=async(e)=>{
 function accountHtml(){
   if(!currentUser||!currentProfile)return "";
   const admin=isAdmin();
-  const plan=admin?"ADMIN — ALL ACCESS":(currentProfile.plan||"free").toUpperCase();
-  return `<b>${escapeHtml(currentProfile.full_name||"TestFlow user")}</b><br>${escapeHtml(currentUser.email)}<br><br><b>Role:</b> ${admin?"Admin":"User"}<br><b>Plan:</b> ${plan}<br><b>Testing access:</b> ${admin?"Free + Premium + Pro":"Based on your active plan"}`;
+  const plan=admin?"ADMIN — ALL ACCESS":effectivePlan().toUpperCase();
+  const basePlan=admin?"admin":(currentProfile.plan||"free");
+  const trial=trialActive()?`<br><b>Trial:</b> All versions unlocked until ${escapeHtml(new Date(currentProfile.trial_expires_at).toLocaleDateString())}`:'';
+  return `<b>${escapeHtml(currentProfile.full_name||"TestFlow user")}</b><br>${escapeHtml(currentUser.email)}<br><br><b>Role:</b> ${admin?"Admin":"User"}<br><b>Account plan:</b> ${escapeHtml(basePlan.toUpperCase())}<br><b>Effective access:</b> ${escapeHtml(accessSummary())}${trial}`;
 }
 $("#accountBtn").onclick=async()=>{
   $("#accountInfo").innerHTML=accountHtml();
@@ -212,7 +227,7 @@ function renderPeriodicReports(rows,isAdmin=false){
       const user=isAdmin?`<span><b>User</b>${escapeHtml(s.user_name||'Unknown user')}<small>${escapeHtml(s.user_email||'')}</small></span>`:'';
       return `<div class="periodic-row"><div><b>${escapeHtml(s.project_name||'Untitled project')}</b><small>${escapeHtml((s.test_type||'General test').replace(/^Code Testing · |^Application Testing · /,''))} · ${safeDate(s.completed_at||s.started_at)}</small></div>${user}<span class="periodic-warning ${hasWarnings?'has-warning':'no-warning'}"><b>${hasWarnings?'Warnings found':'No warnings'}</b><small>${hasWarnings?warnings.map(w=>escapeHtml(w)).join('<br>'):'No warning was recorded for this test.'}</small></span></div>`;
     }).join(''):'<div class="empty compact">No completed tests in this period.</div>';
-    return `<article class="periodic-card"><div class="periodic-card-head"><div><span>${title}</span><h4>${items.length} test${items.length===1?'':'s'}</h4></div><span class="status-badge ${warningItems.length?'warning':'passed'}">${warningItems.length} warning test${warningItems.length===1?'':'s'}</span></div><div class="periodic-metrics"><span><b>${items.length}</b>Total</span><span><b>${passed}</b>No warning</span><span><b>${warningItems.length}</b>With warning</span></div>${userSummary}<p class="periodic-breakdown"><b>Tests used:</b> ${breakdown}</p><div class="periodic-list">${detail}</div></article>`;
+    return `<article class="periodic-card"><div class="periodic-card-head"><div><span>${title}</span><h4>${items.length} test${items.length===1?'':'s'}</h4></div><span class="status-badge ${warningItems.length?'warning':'passed'}">${warningItems.length} warning test${warningItems.length===1?'':'s'}</span></div><div class="periodic-metrics"><span><b>${items.length}</b>Total</span><span><b>${passed}</b>No warning</span><span><b>${warningItems.length}</b>With warning</span></div>${userSummary}<p class="periodic-breakdown"><b>Tests used:</b> ${breakdown}</p><div class="periodic-actions"><button class="secondary tiny" data-periodic-view="${key}">View report</button><button class="primary tiny" data-periodic-download="${key}">Download report</button></div><div class="periodic-list">${detail}</div></article>`;
   }).join('')}</div></div>`;
 }
 
@@ -231,6 +246,8 @@ async function loadHistory(){
       $$('[data-delete-session]').forEach(btn=>btn.onclick=()=>deleteSession(btn.dataset.deleteSession));
       $$('[data-view-report]').forEach(btn=>btn.onclick=async()=>openSavedReport(btn.dataset.viewReport));
       $$('[data-download-report]').forEach(btn=>btn.onclick=async()=>openSavedReport(btn.dataset.downloadReport));
+      $('#periodicReports').querySelectorAll('[data-periodic-view]').forEach(btn=>btn.onclick=()=>openPeriodicReport(btn.dataset.periodicView,rows,false));
+      $('#periodicReports').querySelectorAll('[data-periodic-download]').forEach(btn=>btn.onclick=()=>downloadPeriodicReport(btn.dataset.periodicDownload,rows,false));
       return;
     }
     lastError=error;
@@ -238,6 +255,30 @@ async function loadHistory(){
   }
   $('#periodicReports').innerHTML='<div class="empty error-box">Periodic reports could not be loaded.</div>';
   $('#historyList').innerHTML=`<div class="empty error-box">History error: ${escapeHtml(lastError?.message||'Unable to load history.')}<br><small>Refresh once or run the latest TestFlow SQL.</small></div>`;
+}
+
+function periodicRows(rows,period){
+  const {start,end}=periodBounds(period);
+  return (rows||[]).filter(s=>{const d=new Date(s.completed_at||s.started_at||s.created_at);return !Number.isNaN(d.getTime())&&d>=start&&d<end;});
+}
+function periodicDocumentHtml(period,rows,isAdmin=false){
+  const titles={daily:'Daily Testing Report',weekly:'Weekly Testing Report',monthly:'Monthly Testing Report',yearly:'Yearly Testing Report'};
+  const items=periodicRows(rows,period);
+  const esc=escapeHtml;
+  const warningsCount=items.filter(s=>getReportWarnings(s).length).length;
+  const testCounts={}; const users={};
+  items.forEach(s=>{const t=(s.test_type||'General test').replace(/^Code Testing · |^Application Testing · /,'');testCounts[t]=(testCounts[t]||0)+1;if(isAdmin){const u=s.user_email||s.user_name||'Unknown user';users[u]=(users[u]||0)+1;}});
+  const range=periodBounds(period);
+  const rowsHtml=items.length?items.map((s,i)=>{const ws=getReportWarnings(s);const u=isAdmin?`<td>${esc(s.user_name||'Unknown')}<br><small>${esc(s.user_email||'')}</small></td>`:'';return `<tr><td>${i+1}</td><td>${esc(s.project_name||'Untitled project')}</td>${u}<td>${esc((s.test_type||'General test').replace(/^Code Testing · |^Application Testing · /,''))}</td><td>${esc(new Date(s.completed_at||s.started_at).toLocaleString())}</td><td class="${ws.length?'warn':'ok'}">${ws.length?'Warning':'No warning'}${ws.length?`<ul>${ws.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>`:''}</td></tr>`}).join(''):'<tr><td colspan="6">No completed tests in this period.</td></tr>';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titles[period])}</title><style>body{font-family:Arial,Helvetica,sans-serif;background:#eef0eb;color:#253129;margin:0;padding:32px}.doc{max-width:1100px;margin:auto;background:#fff;padding:42px;box-shadow:0 15px 45px rgba(0,0,0,.08)}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:700;color:#668b73}.cover{border-bottom:1px solid #ddd;padding-bottom:24px}.cover h1{font-size:34px;margin:8px 0}.muted{color:#69736d}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:22px 0}.metric{background:#f0f2ed;padding:15px;border-radius:8px}.metric b{display:block;font-size:24px}.summary{display:flex;gap:8px;flex-wrap:wrap}.chip{background:#f4f5f1;border:1px solid #dde0d8;padding:8px 10px;border-radius:7px;font-size:11px}table{width:100%;border-collapse:collapse;margin-top:18px;font-size:11px}th,td{border-bottom:1px solid #e4e6df;padding:10px;text-align:left;vertical-align:top}th{background:#f2f3ef}.warn{color:#8a6e3f}.ok{color:#52735b}.warn ul{margin:5px 0 0;padding-left:18px}.footer{margin-top:28px;border-top:1px solid #ddd;padding-top:12px;font-size:10px;color:#7a837d}@media(max-width:700px){body{padding:10px}.doc{padding:20px}.metrics{grid-template-columns:1fr 1fr}table{font-size:9px}}</style></head><body><main class="doc"><div class="cover"><div class="eyebrow">TESTFLOW PERIODIC REPORT</div><h1>${esc(titles[period])}</h1><p class="muted">${esc(range.start.toLocaleString())} — ${esc(range.end.toLocaleString())}</p><p>${isAdmin?'Admin report covering all users.':'Private report covering only this account.'}</p></div><div class="metrics"><div class="metric"><b>${items.length}</b>Total tests</div><div class="metric"><b>${items.filter(s=>!getReportWarnings(s).length).length}</b>No warning</div><div class="metric"><b>${warningsCount}</b>With warning</div><div class="metric"><b>${Object.keys(testCounts).length}</b>Testing types</div></div><h2>Testing type summary</h2><div class="summary">${Object.entries(testCounts).map(([k,v])=>`<span class="chip">${esc(k)} × ${v}</span>`).join('')||'<span class="chip">No tests</span>'}</div>${isAdmin?`<h2>User summary</h2><div class="summary">${Object.entries(users).map(([k,v])=>`<span class="chip">${esc(k)} × ${v}</span>`).join('')||'<span class="chip">No users</span>'}</div>`:''}<h2>Detailed test records</h2><table><thead><tr><th>#</th><th>Project</th>${isAdmin?'<th>User</th>':''}<th>Test</th><th>Completed</th><th>Warnings / findings</th></tr></thead><tbody>${rowsHtml}</tbody></table><div class="footer">Generated by TestFlow · ${isAdmin?'Admin':'User'} periodic report</div></main></body></html>`;
+}
+function openPeriodicReport(period,rows,isAdmin=false){
+  const titles={daily:'Daily report',weekly:'Weekly report',monthly:'Monthly report',yearly:'Yearly report'};
+  $('#reportModalBody').innerHTML=`<div class="periodic-document-view"><div class="eyebrow">TESTFLOW PERIODIC REPORT</div><h2>${titles[period]}</h2><p>Full document-style report for this period. ${isAdmin?'Includes all users and their test activity.':'Includes only your own activity.'}</p><iframe title="Periodic report" class="periodic-report-frame"></iframe><div class="formal-actions"><button class="primary" id="periodicDownloadNow">Download report</button><button class="secondary" id="periodicCloseNow">Close</button></div></div>`;
+  openModal('#reportModal'); const frame=$('#reportModalBody iframe'); frame.srcdoc=periodicDocumentHtml(period,rows,isAdmin); $('#periodicDownloadNow').onclick=()=>downloadPeriodicReport(period,rows,isAdmin); $('#periodicCloseNow').onclick=()=>closeModal($('#reportModal'));
+}
+function downloadPeriodicReport(period,rows,isAdmin=false){
+  const titles={daily:'daily',weekly:'weekly',monthly:'monthly',yearly:'yearly'}; const html=periodicDocumentHtml(period,rows,isAdmin); const blob=new Blob([html],{type:'text/html;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`TestFlow-${titles[period]}-report.html`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 async function openSavedReport(reportId){
@@ -301,8 +342,8 @@ function updateWorkspaceAccess(){
   $("#workspaceGate").hidden=signedIn;
   $("#workspaceControls").hidden=!signedIn;
   if(!signedIn){$("#workspaceStatus").textContent="Log in or create a Free account to start testing.";return;}
-  const plan=isAdmin()?"ADMIN — ALL ACCESS":(currentProfile?.plan||"free").toUpperCase();
-  $("#workspaceStatus").textContent=`Signed in · ${plan} · Choose Code Testing or Application Testing, select a test type, then run it.`;
+  const plan=isAdmin()?"ADMIN — ALL ACCESS":effectivePlan().toUpperCase();
+  $("#workspaceStatus").textContent=`Signed in · ${plan}${trialLabel()} · ${accessSummary()}. Choose Code Testing or Application Testing, select a test type, then run it.`;
   updateTestOptions();
 }
 function updateTestOptions(){
@@ -758,7 +799,19 @@ async function loadAdminRequests(){
 window.acceptPlanRequest=async(id)=>{const now=new Date().toISOString();const {error}=await supabaseClient.from('plan_requests').update({status:'awaiting_payment',accepted_at:now,reviewed_by:currentUser.id,reviewed_at:now}).eq('id',id).eq('status','pending');if(error)toast(error.message);else{toast('Request accepted. User can now pay using the configured UPI/QR.');loadAdminRequests();loadAdminStats();}};
 window.activatePlan=async(id,userId,plan)=>{const {error}=await supabaseClient.rpc('admin_activate_plan',{p_request_id:id});if(error){toast(error.message);return}toast(`${plan.toUpperCase()} plan activated.`);loadAdminRequests();loadAdminStats();};
 window.rejectRequest=async(id)=>{const now=new Date().toISOString();const {error}=await supabaseClient.from('plan_requests').update({status:'rejected',rejected_at:now,reviewed_by:currentUser.id,reviewed_at:now}).eq('id',id).in('status',['pending','awaiting_payment','payment_submitted']);if(error)toast(error.message);else{toast('Request rejected.');loadAdminRequests();loadAdminStats();}};
-async function loadAdminStats(){if(!isAdmin())return;const [{count:users},{count:sessions},{data:historyData,error:historyError},{count:pending}]=await Promise.all([supabaseClient.from('profiles').select('id',{count:'exact',head:true}),supabaseClient.from('test_sessions').select('id',{count:'exact',head:true}),supabaseClient.rpc('get_test_history'),supabaseClient.from('plan_requests').select('id',{count:'exact',head:true}).in('status',['pending','payment_submitted'])]);const rows=!historyError&&Array.isArray(historyData)?historyData:[];$('#adminStats').innerHTML=`<div><b>${users??0}</b><small>accounts</small></div><div><b>${sessions??0}</b><small>test sessions</small></div><div><b>${pending??0}</b><small>requests needing admin action</small></div>`;$('#adminUsageReports').innerHTML=historyError?`<div class="empty error-box">Could not load admin testing reports: ${escapeHtml(historyError.message)}</div>`:renderPeriodicReports(rows,true);}
+async function loadAdminUserAccess(){
+  if(!isAdmin())return;
+  const {data,error}=await supabaseClient.rpc('get_user_access_overview');
+  if(error){$('#adminUserAccess').innerHTML=`<div class="empty error-box">Could not load user access: ${escapeHtml(error.message)}</div>`;return;}
+  const rows=Array.isArray(data)?data:[];
+  $('#adminUserAccess').innerHTML=`<div class="access-manager-head"><div><h3>User access manager</h3><p>Use this to create/verify Premium and Pro test accounts. Each account's effective access is shown below.</p></div></div>`+(rows.length?rows.map(u=>{const trial=u.trial_active?`<span class="access-chip trial">Pro trial until ${escapeHtml(new Date(u.trial_expires_at).toLocaleDateString())}</span>`:'';return `<div class="user-access-row"><div><b>${escapeHtml(u.full_name||'TestFlow user')}</b><small>${escapeHtml(u.email||'')}</small><small>${u.test_count||0} test${u.test_count==1?'':'s'} · ${escapeHtml(u.effective_plan||'free')} access ${trial}</small></div><span class="access-plan ${escapeHtml(u.effective_plan||'free')}">${escapeHtml((u.effective_plan||'free').toUpperCase())}</span><div class="user-access-actions"><button class="secondary tiny" onclick="setUserPlan('${u.id}','free')">Free</button><button class="secondary tiny" onclick="setUserPlan('${u.id}','premium')">Premium</button><button class="secondary tiny" onclick="setUserPlan('${u.id}','pro')">Pro</button></div></div>`}).join(''):'<div class="empty">No user accounts found.</div>');
+}
+window.setUserPlan=async(id,plan)=>{if(!isAdmin())return;const {error}=await supabaseClient.rpc('admin_set_user_plan',{p_user_id:id,p_plan:plan});if(error){toast(error.message);return}toast(`User plan set to ${plan.toUpperCase()}.`);await loadAdminUserAccess();};
+
+async function loadAdminStats(){if(!isAdmin())return;const [{count:users},{count:sessions},{data:historyData,error:historyError},{count:pending}]=await Promise.all([supabaseClient.from('profiles').select('id',{count:'exact',head:true}),supabaseClient.from('test_sessions').select('id',{count:'exact',head:true}),supabaseClient.rpc('get_test_history'),supabaseClient.from('plan_requests').select('id',{count:'exact',head:true}).in('status',['pending','payment_submitted'])]);const rows=!historyError&&Array.isArray(historyData)?historyData:[];$('#adminStats').innerHTML=`<div><b>${users??0}</b><small>accounts</small></div><div><b>${sessions??0}</b><small>test sessions</small></div><div><b>${pending??0}</b><small>requests needing admin action</small></div>`;$('#adminUsageReports').innerHTML=historyError?`<div class="empty error-box">Could not load admin testing reports: ${escapeHtml(historyError.message)}</div>`:renderPeriodicReports(rows,true);
+  if(!historyError){$('#adminUsageReports').querySelectorAll('[data-periodic-view]').forEach(btn=>btn.onclick=()=>openPeriodicReport(btn.dataset.periodicView,rows,true));$('#adminUsageReports').querySelectorAll('[data-periodic-download]').forEach(btn=>btn.onclick=()=>downloadPeriodicReport(btn.dataset.periodicDownload,rows,true));}
+  await loadAdminUserAccess();
+}
 
 $$('.stars button').forEach(btn=>btn.onclick=()=>{selectedRating=Number(btn.dataset.star);$$('.stars button').forEach(b=>{const active=Number(b.dataset.star)<=selectedRating;b.classList.toggle('active',active);b.textContent=active?'★':'☆'});});
 $('#submitReview').onclick=async()=>{if(!currentUser){switchAuthMode('login');openModal('#authModal');return}if(!selectedRating){$('#reviewStatus').textContent='Choose a rating first.';return}if(!currentTestReport){$('#reviewStatus').textContent='Download a report first, then rate that report.';return}if(!window.__reportWasDownloaded){$('#reviewStatus').textContent='Download the report first. Rating is mandatory after download.';return}const payload={user_id:currentUser.id,report_id:lastReportId||null,rating:selectedRating,feedback:$('#reviewText').value.trim()};const {error}=await supabaseClient.from('reviews').insert(payload);if(error){$('#reviewStatus').textContent=error.message;return}reviewSubmitted=true;window.__reportWasDownloaded=false;selectedRating=0;$$('.stars button').forEach(b=>{b.classList.remove('active');b.textContent='☆'});$('#reviewText').value='';$('#reviewStatus').textContent='Review saved for this report. You can start another test.';toast('Thank you. Your report feedback was saved.');};
